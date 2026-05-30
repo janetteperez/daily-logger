@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hey Claude — Daily Logger</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f9f8f6; --surface: #ffffff; --surface2: #f1f0ec;
+    --border: rgba(0,0,0,0.1); --border2: rgba(0,0,0,0.18);
+    --text: #1a1a1a; --text2: #666; --text3: #999;
+    --green: #1D9E75; --red: #E24B4A; --radius: 10px; --radius-sm: 6px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .header h1 { font-size: 18px; font-weight: 500; }
+  .date-label { font-size: 13px; color: var(--text3); }
+  .status-bar { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border2); flex-shrink: 0; transition: background 0.3s; }
+  .dot.listening { background: var(--green); animation: pulse 1.8s infinite; }
+  .dot.active { background: var(--red); animation: pulse 0.7s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .status-text { font-size: 14px; color: var(--text2); flex: 1; }
+  .live-transcript { font-size: 12px; color: var(--text3); font-style: italic; max-width: 220px; text-align: right; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .start-btn { padding: 7px 18px; font-size: 13px; border-radius: var(--radius-sm); cursor: pointer; border: 0.5px solid var(--border2); background: transparent; color: var(--text); white-space: nowrap; transition: background 0.15s; }
+  .start-btn:hover { background: var(--surface2); }
+  .start-btn.active { background: #fff0f0; border-color: var(--red); color: var(--red); }
+  .next-summary-bar { font-size: 12px; color: var(--text3); text-align: center; padding: 6px; margin-bottom: 16px; }
+  .log-label { font-size: 11px; color: var(--text3); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px; }
+  .log-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .log-entry { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: baseline; gap: 10px; }
+  .log-time { font-size: 12px; color: var(--text3); flex-shrink: 0; }
+  .log-text { font-size: 14px; color: var(--text); line-height: 1.5; }
+  .empty-state { text-align: center; padding: 32px 20px; color: var(--text3); font-size: 14px; border: 0.5px dashed var(--border2); border-radius: var(--radius); background: var(--surface); line-height: 1.8; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .action-btn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; border-radius: var(--radius-sm); cursor: pointer; border: 0.5px solid var(--border2); background: transparent; color: var(--text); transition: background 0.15s; }
+  .action-btn:hover { background: var(--surface2); }
+  .action-btn.primary { background: var(--text); color: #fff; border-color: var(--text); }
+  .action-btn.primary:hover { opacity: 0.85; }
+  .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .action-btn.ghost { color: var(--text3); margin-left: auto; }
+  .summary-panel { margin-top: 16px; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .summary-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid var(--border); background: var(--surface2); }
+  .summary-title { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .auto-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: #fff8e6; color: #BA7517; border: 0.5px solid #f0d080; }
+  .summary-body { padding: 16px; font-size: 14px; line-height: 1.75; color: var(--text); white-space: pre-wrap; }
+  .summary-body.loading { color: var(--text3); font-style: italic; }
+  .copy-btn { padding: 4px 12px; font-size: 12px; border-radius: var(--radius-sm); cursor: pointer; border: 0.5px solid var(--border2); background: transparent; color: var(--text2); }
+  .copy-btn:hover { background: var(--surface2); }
+  .restored-banner { font-size: 12px; color: #0F6E56; background: #E1F5EE; border-radius: var(--radius-sm); padding: 6px 12px; margin-bottom: 12px; display: none; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; font-size: 13px; padding: 8px 20px; border-radius: 20px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 999; }
+  .toast.show { opacity: 1; }
+
+  /* API Key setup screen */
+  .setup-screen { max-width: 480px; margin: 60px auto; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 32px; }
+  .setup-screen h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+  .setup-screen p { font-size: 14px; color: var(--text2); line-height: 1.6; margin-bottom: 20px; }
+  .setup-screen a { color: #185FA5; text-decoration: none; }
+  .setup-screen a:hover { text-decoration: underline; }
+  .key-input { width: 100%; padding: 10px 12px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-family: monospace; margin-bottom: 12px; }
+  .key-input:focus { outline: none; border-color: #185FA5; }
+  .save-btn { width: 100%; padding: 10px; font-size: 14px; border-radius: var(--radius-sm); cursor: pointer; border: none; background: var(--text); color: #fff; font-weight: 500; }
+  .save-btn:hover { opacity: 0.85; }
+  .key-error { font-size: 13px; color: var(--red); margin-bottom: 10px; display: none; }
+  .key-bar { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 4px; }
+  .change-key-btn { font-size: 12px; color: var(--text3); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
+  .change-key-btn:hover { color: var(--text2); }
+
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1a1a1a; --surface: #242424; --surface2: #2e2e2e; --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.18); --text: #f0f0f0; --text2: #aaa; --text3: #666; }
+    .action-btn.primary { background: #f0f0f0; color: #1a1a1a; }
+    .auto-badge { background: #2a2010; color: #e8b84b; border-color: #6a5010; }
+    .restored-banner { color: #5DCAA5; background: #04342C; }
+    .key-input { background: #1a1a1a; }
+    .save-btn { background: #f0f0f0; color: #1a1a1a; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Setup screen -->
+<div id="setupScreen" class="setup-screen" style="display:none;">
+  <h2>Hey Claude — Daily Logger</h2>
+  <p>To enable auto-summaries, enter your Anthropic API key. It's saved only in your browser — never uploaded anywhere.<br><br>Get your key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → Build → API Keys.</p>
+  <div class="key-error" id="keyError">Please enter a valid API key starting with sk-ant-</div>
+  <input class="key-input" type="password" id="keyInput" placeholder="sk-ant-..." autocomplete="off" />
+  <button class="save-btn" onclick="saveKey()">Save &amp; Start Logging</button>
+</div>
+
+<!-- Main app -->
+<div id="mainApp" style="display:none; max-width: 720px; margin: 0 auto;">
+  <div class="header">
+    <div>
+      <h1>Hey Claude — Daily Logger</h1>
+      <div class="date-label" id="dateLabel"></div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size: 12px; color: var(--text3); margin-bottom:4px;">Auto-summary: 3:30 PM &amp; 7:00 PM</div>
+      <button class="change-key-btn" onclick="changeKey()">Change API key</button>
+    </div>
+  </div>
+
+  <div class="restored-banner" id="restoredBanner"></div>
+
+  <div class="status-bar">
+    <div class="dot" id="dot"></div>
+    <span class="status-text" id="statusText">Click Start to begin listening</span>
+    <span class="live-transcript" id="liveTranscript"></span>
+    <button class="start-btn" id="startBtn" onclick="toggleListening()">Start listening</button>
+  </div>
+
+  <div class="next-summary-bar" id="nextSummaryBar"></div>
+
+  <div class="log-label">Today's log <span id="entryCount" style="font-weight:400;"></span></div>
+  <div class="log-list" id="logList"></div>
+
+  <div class="actions">
+    <button class="action-btn primary" id="summaryBtn" onclick="requestSummary('manual')" disabled>Summarize now</button>
+    <button class="action-btn" id="exportBtn" onclick="exportLog()" disabled>Export log</button>
+    <button class="action-btn ghost" onclick="clearLog()">Clear log</button>
+  </div>
+
+  <div id="summaryContainer"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TRIGGER = 'hey claude';
+const TODAY = new Date().toDateString();
+const STORAGE_KEY = 'hcl_entries_' + TODAY;
+const FIRED_KEY = 'hcl_autofired_' + TODAY;
+const API_KEY_STORAGE = 'hcl_apikey';
+const AUTO_TIMES = [{h:15,m:30,label:'3:30 PM'},{h:19,m:0,label:'7:00 PM'}];
+
+let recognition=null, isListening=false, capturing=false, captureBuffer='';
+let entries=[], autoFired={};
+
+function init() {
+  const key = localStorage.getItem(API_KEY_STORAGE);
+  if (!key) { showSetup(); return; }
+  showApp();
+}
+
+function showSetup() {
+  document.getElementById('setupScreen').style.display = 'block';
+  document.getElementById('mainApp').style.display = 'none';
+  setTimeout(() => document.getElementById('keyInput').focus(), 100);
+}
+
+function saveKey() {
+  const val = document.getElementById('keyInput').value.trim();
+  const err = document.getElementById('keyError');
+  if (!val.startsWith('sk-ant-')) { err.style.display='block'; return; }
+  err.style.display = 'none';
+  localStorage.setItem(API_KEY_STORAGE, val);
+  showApp();
+}
+
+function changeKey() {
+  document.getElementById('keyInput').value = '';
+  showSetup();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('setupScreen').style.display !== 'none') saveKey();
+});
+
+function showApp() {
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  try { const s=localStorage.getItem(STORAGE_KEY); if(s) entries=JSON.parse(s); } catch(e){}
+  try { const a=localStorage.getItem(FIRED_KEY); if(a) autoFired=JSON.parse(a); } catch(e){}
+  if (entries.length > 0) {
+    const b = document.getElementById('restoredBanner');
+    b.textContent = '↩ Restored ' + entries.length + ' entr' + (entries.length===1?'y':'ies') + ' from earlier today';
+    b.style.display = 'block';
+    setTimeout(() => { b.style.display='none'; }, 4000);
+  }
+  renderLog();
+  updateNextSummaryBar();
+  setInterval(() => { checkAutoSummary(); updateNextSummaryBar(); }, 30000);
+  checkAutoSummary();
+  window.addEventListener('beforeunload', e => { if(entries.length>0){e.preventDefault();e.returnValue='';} });
+}
+
+function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch(e){} }
+
+function checkAutoSummary() {
+  const n=new Date(), h=n.getHours(), m=n.getMinutes();
+  AUTO_TIMES.forEach(t => {
+    const k = t.h+':'+String(t.m).padStart(2,'0');
+    if (h===t.h && m>=t.m && m<t.m+30 && !autoFired[k]) {
+      autoFired[k]=true;
+      try { localStorage.setItem(FIRED_KEY, JSON.stringify(autoFired)); } catch(e){}
+      if (entries.length>0) requestSummary('auto', t.label);
+    }
+  });
+}
+
+function updateNextSummaryBar() {
+  const n=new Date(), h=n.getHours(), m=n.getMinutes();
+  const up = AUTO_TIMES.filter(t => {
+    const k=t.h+':'+String(t.m).padStart(2,'0');
+    return !autoFired[k] && (t.h>h||(t.h===h&&t.m>m));
+  });
+  const bar = document.getElementById('nextSummaryBar');
+  if (up.length>0) {
+    const next=up[0], diff=(next.h*60+next.m)-(h*60+m);
+    const hrs=Math.floor(diff/60), mins=diff%60;
+    bar.textContent = 'Next auto-summary in '+(hrs>0?hrs+'h ':'')+mins+'m ('+next.label+')';
+  } else { bar.textContent = 'All scheduled summaries done for today'; }
+}
+
+function toggleListening() { if(isListening) stopListening(); else startListening(); }
+
+function startListening() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('statusText').textContent='Speech recognition not supported — use Chrome.'; return; }
+  recognition = new SR();
+  recognition.continuous=true; recognition.interimResults=true; recognition.lang='en-US';
+  recognition.onstart = () => {
+    isListening=true; setDot('listening');
+    document.getElementById('statusText').textContent='Listening... say "Hey Claude" to log';
+    document.getElementById('startBtn').textContent='Stop listening';
+    document.getElementById('startBtn').classList.add('active');
+  };
+  recognition.onresult = (e) => {
+    let interim='', final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal) final+=t; else interim+=t;
+    }
+    const disp=(final+interim).trim();
+    document.getElementById('liveTranscript').textContent=disp?'"'+disp+'"':'';
+    if(final) processFinal(final.toLowerCase().trim());
+  };
+  recognition.onerror = (e) => {
+    if(e.error==='not-allowed'){document.getElementById('statusText').textContent='Mic blocked — allow microphone in Chrome site settings.';stopListening();}
+    else if(e.error!=='no-speech'){document.getElementById('statusText').textContent='Mic error: '+e.error;}
+  };
+  recognition.onend = () => { if(isListening) setTimeout(()=>{try{recognition.start();}catch(e){}},300); };
+  recognition.start();
+}
+
+function stopListening() {
+  isListening=false;
+  if(recognition) try{recognition.stop();}catch(e){}
+  setDot('off');
+  document.getElementById('statusText').textContent='Stopped. Click Start listening to resume.';
+  document.getElementById('startBtn').textContent='Start listening';
+  document.getElementById('startBtn').classList.remove('active');
+  document.getElementById('liveTranscript').textContent='';
+}
+
+function processFinal(text) {
+  const idx=text.indexOf(TRIGGER);
+  if(idx!==-1){
+    const after=text.slice(idx+TRIGGER.length).replace(/^[,.\s]+/,'').trim();
+    if(after.length>2){addEntry(after);capturing=false;captureBuffer='';}
+    else{capturing=true;captureBuffer='';setDot('active');document.getElementById('statusText').textContent='Ready — go ahead...';}
+  } else if(capturing){
+    captureBuffer+=' '+text;
+    if(captureBuffer.trim().length>3){addEntry(captureBuffer.trim());captureBuffer='';capturing=false;}
+  }
+}
+
+function addEntry(text) {
+  const now=new Date();
+  const time=now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  entries.push({text:text.charAt(0).toUpperCase()+text.slice(1),time,ts:now.toISOString()});
+  save(); renderLog(); setDot('listening');
+  document.getElementById('statusText').textContent='Logged at '+time+'. Still listening...';
+  setTimeout(()=>{if(isListening)document.getElementById('statusText').textContent='Listening... say "Hey Claude" to log';},2500);
+}
+
+function renderLog() {
+  const list=document.getElementById('logList');
+  if(entries.length===0){
+    list.innerHTML='<div class="empty-state">No entries yet.<br>Say <strong>"Hey Claude, [your update]"</strong> to log something.</div>';
+    document.getElementById('entryCount').textContent='';
+    document.getElementById('summaryBtn').disabled=true;
+    document.getElementById('exportBtn').disabled=true;
+    return;
+  }
+  list.innerHTML=entries.map(e=>`<div class="log-entry"><span class="log-time">${e.time}</span><span class="log-text">${esc(e.text)}</span></div>`).join('');
+  document.getElementById('entryCount').textContent='('+entries.length+')';
+  document.getElementById('summaryBtn').disabled=false;
+  document.getElementById('exportBtn').disabled=false;
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function setDot(s){document.getElementById('dot').className='dot'+(s==='off'?'':' '+s);}
+
+async function requestSummary(trigger, label) {
+  if(entries.length===0){showToast('No entries to summarize yet');return;}
+  const isAuto=trigger==='auto';
+  const ts=new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  const titleLabel=isAuto?(label+' auto-summary'):('Summary as of '+ts);
+  const con=document.getElementById('summaryContainer');
+  const pid='summary_'+Date.now();
+  const panel=document.createElement('div');
+  panel.className='summary-panel'; panel.id=pid;
+  panel.innerHTML=`<div class="summary-header"><span class="summary-title">${esc(titleLabel)}${isAuto?' <span class="auto-badge">auto</span>':''}</span><button class="copy-btn" onclick="copySummary('${pid}')">Copy</button></div><div class="summary-body loading" id="${pid}_body">Generating summary...</div>`;
+  con.appendChild(panel);
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  const log=entries.map((e,i)=>`${i+1}. [${e.time}] ${e.text}`).join('\n');
+  const prompt=`Here are voice log entries from my workday. Summarize them grouped by task or project. For each group give a short label and 1-2 sentence status. Concise and practical — written the way a CPA would write it, no fluff.\n\nEntries:\n${log}`;
+  const apiKey=localStorage.getItem(API_KEY_STORAGE);
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    });
+    const data=await res.json();
+    const text=data.content?.map(b=>b.text||'').join('')||'No response received.';
+    const body=document.getElementById(pid+'_body');
+    body.textContent=text; body.classList.remove('loading');
+    try{const k='hcl_summaries_'+TODAY;const ex=JSON.parse(localStorage.getItem(k)||'[]');ex.push({label:titleLabel,text,ts:new Date().toISOString()});localStorage.setItem(k,JSON.stringify(ex));}catch(e){}
+  } catch(err) {
+    const body=document.getElementById(pid+'_body');
+    body.textContent='Error generating summary. Check your connection and try again.';
+    body.classList.remove('loading');
+  }
+}
+
+function copySummary(pid) {
+  const body=document.getElementById(pid+'_body');
+  if(!body)return;
+  navigator.clipboard.writeText(body.textContent).then(()=>showToast('Copied to clipboard'));
+}
+
+function exportLog() {
+  if(entries.length===0)return;
+  const date=new Date().toLocaleDateString('en-US');
+  let text='Hey Claude — Daily Log\n'+date+'\n'+'─'.repeat(36)+'\n\n';
+  entries.forEach(e=>{text+=`[${e.time}]  ${e.text}\n`;});
+  const blob=new Blob([text],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='daily-log-'+new Date().toISOString().slice(0,10)+'.txt';
+  a.click(); showToast('Log exported');
+}
+
+function clearLog() {
+  if(!confirm('Clear all '+entries.length+' entries? This cannot be undone.'))return;
+  entries=[];
+  try{localStorage.removeItem(STORAGE_KEY);}catch(e){}
+  renderLog();
+  document.getElementById('summaryContainer').innerHTML='';
+  showToast('Log cleared');
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+init();
+</script>
+</body>
+</html>
