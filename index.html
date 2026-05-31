@@ -51,54 +51,22 @@
   .restored-banner { font-size: 12px; color: #0F6E56; background: #E1F5EE; border-radius: var(--radius-sm); padding: 6px 12px; margin-bottom: 12px; display: none; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; font-size: 13px; padding: 8px 20px; border-radius: 20px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 999; }
   .toast.show { opacity: 1; }
-
-  /* API Key setup screen */
-  .setup-screen { max-width: 480px; margin: 60px auto; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 32px; }
-  .setup-screen h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
-  .setup-screen p { font-size: 14px; color: var(--text2); line-height: 1.6; margin-bottom: 20px; }
-  .setup-screen a { color: #185FA5; text-decoration: none; }
-  .setup-screen a:hover { text-decoration: underline; }
-  .key-input { width: 100%; padding: 10px 12px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-family: monospace; margin-bottom: 12px; }
-  .key-input:focus { outline: none; border-color: #185FA5; }
-  .save-btn { width: 100%; padding: 10px; font-size: 14px; border-radius: var(--radius-sm); cursor: pointer; border: none; background: var(--text); color: #fff; font-weight: 500; }
-  .save-btn:hover { opacity: 0.85; }
-  .key-error { font-size: 13px; color: var(--red); margin-bottom: 10px; display: none; }
-  .key-bar { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 4px; }
-  .change-key-btn { font-size: 12px; color: var(--text3); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
-  .change-key-btn:hover { color: var(--text2); }
-
   @media (prefers-color-scheme: dark) {
     :root { --bg: #1a1a1a; --surface: #242424; --surface2: #2e2e2e; --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.18); --text: #f0f0f0; --text2: #aaa; --text3: #666; }
     .action-btn.primary { background: #f0f0f0; color: #1a1a1a; }
     .auto-badge { background: #2a2010; color: #e8b84b; border-color: #6a5010; }
     .restored-banner { color: #5DCAA5; background: #04342C; }
-    .key-input { background: #1a1a1a; }
-    .save-btn { background: #f0f0f0; color: #1a1a1a; }
   }
 </style>
 </head>
 <body>
-
-<!-- Setup screen -->
-<div id="setupScreen" class="setup-screen" style="display:none;">
-  <h2>Hey Claude — Daily Logger</h2>
-  <p>To enable auto-summaries, enter your Anthropic API key. It's saved only in your browser — never uploaded anywhere.<br><br>Get your key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → Build → API Keys.</p>
-  <div class="key-error" id="keyError">Please enter a valid API key starting with sk-ant-</div>
-  <input class="key-input" type="password" id="keyInput" placeholder="sk-ant-..." autocomplete="off" />
-  <button class="save-btn" onclick="saveKey()">Save &amp; Start Logging</button>
-</div>
-
-<!-- Main app -->
-<div id="mainApp" style="display:none; max-width: 720px; margin: 0 auto;">
+<div style="max-width: 720px; margin: 0 auto;">
   <div class="header">
     <div>
       <h1>Hey Claude — Daily Logger</h1>
       <div class="date-label" id="dateLabel"></div>
     </div>
-    <div style="text-align:right;">
-      <div style="font-size: 12px; color: var(--text3); margin-bottom:4px;">Auto-summary: 3:30 PM &amp; 7:00 PM</div>
-      <button class="change-key-btn" onclick="changeKey()">Change API key</button>
-    </div>
+    <div style="font-size: 12px; color: var(--text3); text-align: right;">Auto-summary: 3:30 PM &amp; 7:00 PM</div>
   </div>
 
   <div class="restored-banner" id="restoredBanner"></div>
@@ -117,7 +85,6 @@
 
   <div class="actions">
     <button class="action-btn primary" id="summaryBtn" onclick="requestSummary('manual')" disabled>Summarize now</button>
-    <button class="action-btn" id="exportBtn" onclick="exportLog()" disabled>Export log</button>
     <button class="action-btn ghost" onclick="clearLog()">Clear log</button>
   </div>
 
@@ -131,45 +98,12 @@ const TRIGGER = 'hey claude';
 const TODAY = new Date().toDateString();
 const STORAGE_KEY = 'hcl_entries_' + TODAY;
 const FIRED_KEY = 'hcl_autofired_' + TODAY;
-const API_KEY_STORAGE = 'hcl_apikey';
 const AUTO_TIMES = [{h:15,m:30,label:'3:30 PM'},{h:19,m:0,label:'7:00 PM'}];
 
 let recognition=null, isListening=false, capturing=false, captureBuffer='';
 let entries=[], autoFired={};
 
 function init() {
-  const key = localStorage.getItem(API_KEY_STORAGE);
-  if (!key) { showSetup(); return; }
-  showApp();
-}
-
-function showSetup() {
-  document.getElementById('setupScreen').style.display = 'block';
-  document.getElementById('mainApp').style.display = 'none';
-  setTimeout(() => document.getElementById('keyInput').focus(), 100);
-}
-
-function saveKey() {
-  const val = document.getElementById('keyInput').value.trim();
-  const err = document.getElementById('keyError');
-  if (!val.startsWith('sk-ant-')) { err.style.display='block'; return; }
-  err.style.display = 'none';
-  localStorage.setItem(API_KEY_STORAGE, val);
-  showApp();
-}
-
-function changeKey() {
-  document.getElementById('keyInput').value = '';
-  showSetup();
-}
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('setupScreen').style.display !== 'none') saveKey();
-});
-
-function showApp() {
-  document.getElementById('setupScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display = 'block';
   document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   try { const s=localStorage.getItem(STORAGE_KEY); if(s) entries=JSON.parse(s); } catch(e){}
   try { const a=localStorage.getItem(FIRED_KEY); if(a) autoFired=JSON.parse(a); } catch(e){}
@@ -282,13 +216,11 @@ function renderLog() {
     list.innerHTML='<div class="empty-state">No entries yet.<br>Say <strong>"Hey Claude, [your update]"</strong> to log something.</div>';
     document.getElementById('entryCount').textContent='';
     document.getElementById('summaryBtn').disabled=true;
-    document.getElementById('exportBtn').disabled=true;
     return;
   }
-  list.innerHTML=entries.map(e=>`<div class="log-entry"><span class="log-time">${e.time}</span><span class="log-text">${esc(e.text)}</span></div>`).join('');
+  list.innerHTML=entries.map(e=>`<div class="log-entry"><span class="log-time">${esc(e.time)}</span><span class="log-text">${esc(e.text)}</span></div>`).join('');
   document.getElementById('entryCount').textContent='('+entries.length+')';
   document.getElementById('summaryBtn').disabled=false;
-  document.getElementById('exportBtn').disabled=false;
 }
 
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -308,12 +240,11 @@ async function requestSummary(trigger, label) {
   panel.scrollIntoView({behavior:'smooth',block:'nearest'});
   const log=entries.map((e,i)=>`${i+1}. [${e.time}] ${e.text}`).join('\n');
   const prompt=`Here are voice log entries from my workday. Summarize them grouped by task or project. For each group give a short label and 1-2 sentence status. Concise and practical — written the way a CPA would write it, no fluff.\n\nEntries:\n${log}`;
-  const apiKey=localStorage.getItem(API_KEY_STORAGE);
   try {
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
+    const res=await fetch('/.netlify/functions/summarize',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt})
     });
     const data=await res.json();
     const text=data.content?.map(b=>b.text||'').join('')||'No response received.';
@@ -331,18 +262,6 @@ function copySummary(pid) {
   const body=document.getElementById(pid+'_body');
   if(!body)return;
   navigator.clipboard.writeText(body.textContent).then(()=>showToast('Copied to clipboard'));
-}
-
-function exportLog() {
-  if(entries.length===0)return;
-  const date=new Date().toLocaleDateString('en-US');
-  let text='Hey Claude — Daily Log\n'+date+'\n'+'─'.repeat(36)+'\n\n';
-  entries.forEach(e=>{text+=`[${e.time}]  ${e.text}\n`;});
-  const blob=new Blob([text],{type:'text/plain'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='daily-log-'+new Date().toISOString().slice(0,10)+'.txt';
-  a.click(); showToast('Log exported');
 }
 
 function clearLog() {
