@@ -247,9 +247,10 @@ async function requestSummary(trigger, label) {
       body:JSON.stringify({prompt})
     });
     const data=await res.json();
-    const text=data.content?.map(b=>b.text||'').join('')||'No response received.';
+const text=data.content?.map(b=>b.text||'').join('')||'No response received.';
     const body=document.getElementById(pid+'_body');
     body.textContent=text; body.classList.remove('loading');
+    if(text !== 'No response received.') autoDownloadSummary(text);
     try{const k='hcl_summaries_'+TODAY;const ex=JSON.parse(localStorage.getItem(k)||'[]');ex.push({label:titleLabel,text,ts:new Date().toISOString()});localStorage.setItem(k,JSON.stringify(ex));}catch(e){}
   } catch(err) {
     const body=document.getElementById(pid+'_body');
@@ -262,6 +263,15 @@ function copySummary(pid) {
   const body=document.getElementById(pid+'_body');
   if(!body)return;
   navigator.clipboard.writeText(body.textContent).then(()=>showToast('Copied to clipboard'));
+}
+
+function autoDownloadSummary(text) {
+  const date = new Date().toISOString().slice(0,10);
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'daily-summary-' + date + '.txt';
+  a.click();
 }
 
 function clearLog() {
