@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hey Claude — Daily Logger</title>
+<title>Update — Daily Logger</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -63,7 +63,7 @@
 <div style="max-width: 720px; margin: 0 auto;">
   <div class="header">
     <div>
-      <h1>Hey Claude — Daily Logger</h1>
+      <h1>Update — Daily Logger</h1>
       <div class="date-label" id="dateLabel"></div>
     </div>
     <div style="font-size: 12px; color: var(--text3); text-align: right;">Auto-summary: 3:30 PM &amp; 7:00 PM</div>
@@ -94,7 +94,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const TRIGGER = 'hey claude';
+const TRIGGER = 'update';
 const TODAY = new Date().toDateString();
 const STORAGE_KEY = 'hcl_entries_' + TODAY;
 const FIRED_KEY = 'hcl_autofired_' + TODAY;
@@ -157,7 +157,7 @@ function startListening() {
   recognition.continuous=true; recognition.interimResults=true; recognition.lang='en-US';
   recognition.onstart = () => {
     isListening=true; setDot('listening');
-    document.getElementById('statusText').textContent='Listening... say "Hey Claude" to log';
+    document.getElementById('statusText').textContent='Listening... say "Update" to log';
     document.getElementById('startBtn').textContent='Stop listening';
     document.getElementById('startBtn').classList.add('active');
   };
@@ -207,13 +207,13 @@ function addEntry(text) {
   entries.push({text:text.charAt(0).toUpperCase()+text.slice(1),time,ts:now.toISOString()});
   save(); renderLog(); setDot('listening');
   document.getElementById('statusText').textContent='Logged at '+time+'. Still listening...';
-  setTimeout(()=>{if(isListening)document.getElementById('statusText').textContent='Listening... say "Hey Claude" to log';},2500);
+  setTimeout(()=>{if(isListening)document.getElementById('statusText').textContent='Listening... say "Update" to log';},2500);
 }
 
 function renderLog() {
   const list=document.getElementById('logList');
   if(entries.length===0){
-    list.innerHTML='<div class="empty-state">No entries yet.<br>Say <strong>"Hey Claude, [your update]"</strong> to log something.</div>';
+    list.innerHTML='<div class="empty-state">No entries yet.<br>Say <strong>"Update, [your update]"</strong> to log something.</div>';
     document.getElementById('entryCount').textContent='';
     document.getElementById('summaryBtn').disabled=true;
     return;
